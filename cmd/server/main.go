@@ -21,12 +21,14 @@ func main() {
 	}
 
 	// Register HTTP handlers from internal/server package
+	http.HandleFunc("/", server.DashboardHandler)
 	http.HandleFunc("/check", server.CheckDomainsHandler)
 	http.HandleFunc("/check/", server.CheckSingleDomainHandler)
 	http.HandleFunc("/health", server.HealthHandler)
 
 	log.Printf("Domain checker service starting on port %s", port)
 	log.Printf("Endpoints:")
+	log.Printf("  GET  /               - Web dashboard (interactive form)")
 	log.Printf("  POST /check         - Check multiple domains (JSON body: {\"domains\": [...]})")
 	log.Printf("  GET  /check/{domain} - Check single domain")
 	log.Printf("  GET  /health        - Health check")
