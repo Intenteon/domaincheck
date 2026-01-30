@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{.CSRFToken}}">
+    <title>Domain Checker v2.1</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #FFF;
+            color: #000;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 42rem;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #E5E5E5;
+            padding-bottom: 1rem;
+        }
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        section {
+            margin-bottom: 2rem;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        ul li {
+            margin-bottom: 0.5rem;
+        }
+        code {
+            background-color: #F4F4F4;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        pre {
+            background-color: #F4F4F4;
+            padding: 1rem;
+            border-radius: 3px;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        textarea {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            font-family: 'Courier New', monospace;
+            border: 1px solid #E5E5E5;
+            border-radius: 3px;
+            resize: vertical;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #000;
+        }
+        button {
+            background-color: #000;
+            color: #FFF;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        button:hover:not(:disabled) {
+            background-color: #333;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        button.secondary {
+            background-color: #FFF;
+            color: #000;
+            border: 1px solid #E5E5E5;
+            margin-left: 0.5rem;
+        }
+        button.secondary:hover:not(:disabled) {
+            background-color: #F4F4F4;
+        }
+        .loading-message {
+            display: none;
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: #F4F4F4;
+            border-radius: 3px;
+            text-align: center;
+        }
+        .loading-message.show {
+            display: block;
+        }
+        #results {
+            display: none;
+            margin-top: 2rem;
+        }
+        #results.show {
+            display: block;
+        }
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #E5E5E5;
+        }
+        .result-item {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #F4F4F4;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .status-available {
+            color: #000;
+        }
+        .status-taken {
+            color: #666;
+        }
+        .status-error {
+            color: #DC2626;
+        }
+        @media (max-width: 640px) {
+            .container {
+                padding: 1rem 0.75rem;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            .results-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Domain Checker v2.1</h1>
+            <p>Fast domain availability checking via RDAP protocol</p>
+        </header>
+
+        <main>
+            <section id="instructions">
+                <h2>API Endpoints</h2>
+                <ul>
+                    <li><code>POST /check</code> - Check multiple domains (JSON body)</li>
+                    <li><code>GET /check/{domain}</code> - Check single domain</li>
+                    <li><code>GET /health</code> - Health check</li>
+                </ul>
+            </section>
+
+            <section id="examples">
+                <h2>API Examples</h2>
+                <p><strong>Check multiple domains:</strong></p>
+                <pre><code>curl -X POST http://localhost:8765/check \
+  -H "Content-Type: application/json" \
+  -d '{"domains": ["trucore", "priment", "axient"]}'</code></pre>
+
+                <p><strong>Check single domain:</strong></p>
+                <pre><code>curl http://localhost:8765/check/trucore.com</code></pre>
+
+                <p><strong>Health check:</strong></p>
+                <pre><code>curl http://localhost:8765/health</code></pre>
+            </section>
+
+            <section id="check-form">
+                <h2>Check Domains</h2>
+                <form id="domainForm">
+                    <div class="form-group">
+                        <label for="domains">Enter domains (one per line, max 100):</label>
+                        <textarea id="domains" name="domains" rows="8" placeholder="example.com&#10;test.org&#10;shop.com" required></textarea>
+                    </div>
+                    <button type="submit" id="submitBtn">Check Domains</button>
+                    <button type="button" class="secondary" id="clearBtn" onclick="clearForm()">Clear</button>
+                </form>
+                <div class="loading-message" id="loadingMessage">
+                    Checking domains... (max 60 seconds)
+                </div>
+            </section>
+
+            <section id="results">
+                <div class="results-header">
+                    <h2>Results</h2>
+                    <button type="button" class="secondary" onclick="copyResults(event)">Copy to Clipboard</button>
+                </div>
+                <div id="resultsList"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // Form submission handler
+        document.getElementById('domainForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const textarea = document.getElementById('domains');
+            const submitBtn = document.getElementById('submitBtn');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const resultsSection = document.getElementById('results');
+
+            // Parse domains from textarea
+            const domainsText = textarea.value.trim();
+            if (!domainsText) {
+                alert('Please enter at least one domain');
+                return;
+            }
+
+            const domains = domainsText
+                .split('\n')
+                .map(d => d.trim())
+                .filter(d => d.length > 0);
+
+            // Validate domain count
+            if (domains.length > 100) {
+                alert('Maximum 100 domains allowed. You entered ' + domains.length + ' domains.');
+                return;
+            }
+
+            // Show loading state
+            submitBtn.disabled = true;
+            loadingMessage.classList.add('show');
+            resultsSection.classList.remove('show');
+
+            try {
+                // Get CSRF token from meta tag
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+                // Make API request
+                const response = await fetch('/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({ domains: domains })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.statusText);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                console.error('Error checking domains:', error);
+                alert('An error occurred while checking domains. Please try again.');
+            } finally {
+                // Hide loading state
+                submitBtn.disabled = false;
+                loadingMessage.classList.remove('show');
+            }
+        });
+
+        // Display results function
+        function displayResults(data) {
+            const resultsList = document.getElementById('resultsList');
+            const resultsSection = document.getElementById('results');
+
+            // Clear previous results
+            resultsList.innerHTML = '';
+
+            // Display each result
+            if (data.results && data.results.length > 0) {
+                data.results.forEach(result => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+
+                    let statusClass, statusIcon, statusText;
+
+                    if (result.error) {
+                        statusClass = 'status-error';
+                        statusIcon = '⚠';
+                        statusText = `${result.domain} - Error: ${result.error}`;
+                    } else if (result.available) {
+                        statusClass = 'status-available';
+                        statusIcon = '✓';
+                        statusText = `${result.domain} - Available`;
+                    } else {
+                        statusClass = 'status-taken';
+                        statusIcon = '✗';
+                        statusText = `${result.domain} - Taken`;
+                    }
+
+                    // SECURITY: Use textContent instead of innerHTML to prevent XSS
+                    const span = document.createElement('span');
+                    span.className = statusClass;
+                    span.textContent = `${statusIcon} ${statusText}`;
+                    div.appendChild(span);
+                    resultsList.appendChild(div);
+                });
+
+                resultsSection.classList.add('show');
+            }
+        }
+
+        // Copy results to clipboard
+        function copyResults(event) {
+            const results = document.querySelectorAll('#resultsList .result-item');
+            if (results.length === 0) {
+                return;
+            }
+
+            const textToCopy = Array.from(results)
+                .map(item => item.textContent.trim())
+                .join('\n');
+
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                // Show brief confirmation
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        // Clear form
+        function clearForm() {
+            document.getElementById('domains').value = '';
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('resultsList').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

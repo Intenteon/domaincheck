@@ -58,6 +58,14 @@ func CheckDomainsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SECURITY: Validate CSRF token for dashboard form submissions
+	// API clients without CSRF tokens are still allowed (backward compatibility)
+	csrfToken := r.Header.Get("X-CSRF-Token")
+	if csrfToken != "" && !ValidateCSRFToken(csrfToken) {
+		http.Error(w, "Invalid or missing CSRF token", http.StatusForbidden)
+		return
+	}
+
 	// SECURITY: Limit request body to 1MB to prevent DoS via large payloads
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	defer r.Body.Close()
