@@ -430,3 +430,87 @@ func TestNormalizeEdgeCases(t *testing.T) {
 		})
 	}
 }
+// TestNormalizeSecurityInputs tests that malicious inputs are properly rejected
+// This prevents command injection vulnerabilities when domain names are passed
+// to external commands like whois
+func TestNormalizeSecurityInputs(t *testing.T) {
+	maliciousInputs := []string{
+		"-h malicious.com",           // Flag injection attempt
+		"--help",                      // Flag injection attempt
+		"--version",                   // Flag injection attempt
+		"-domain.com",                 // Leading hyphen
+		"domain\x00.com",              // Null byte injection
+		"domain;rm -rf /",             // Command injection (shell)
+		"domain|cat /etc/passwd",      // Pipe injection
+		"domain&whoami",               // Background command
+		"domain`id`",                  // Command substitution
+		"domain$(id)",                 // Command substitution
+		"../../../etc/passwd",         // Path traversal
+		"domain\nrm -rf /",            // Newline injection
+		"domain\r\nrm -rf /",          // CRLF injection
+		"dom ain.com",                 // Space in domain (invalid)
+		"domain!.com",                 // Special character
+		"domain@.com",                 // Special character
+		"domain#.com",                 // Special character
+		"domain$.com",                 // Special character
+		"domain%.com",                 // Special character
+		"domain^.com",                 // Special character
+		"domain&.com",                 // Special character
+		"domain*.com",                 // Wildcard
+		"domain?.com",                 // Special character
+		"domain[].com",                // Brackets
+		"domain{}.com",                // Braces
+		"domain<>.com",                // Angle brackets
+		"domain/path",                 // Path separator
+		"domain\\path",                // Backslash
+		"DOMAIN_WITH_UNDERSCORE.com", // Underscore (not valid in domain names)
+	}
+
+	for _, input := range maliciousInputs {
+		t.Run(input, func(t *testing.T) {
+			_, err := Normalize(input)
+			if err == nil {
+				t.Errorf("Normalize(%q) should have returned an error for malicious input, but got nil", input)
+			}
+			// Verify it's the right kind of error
+			if err != ErrInvalidFormat && err != ErrEmptyDomain {
+				t.Errorf("Normalize(%q) returned unexpected error type: %v", input, err)
+			}
+		})
+	}
+}
+
+// TestNormalizeCommandInjectionProtection specifically tests protection against
+// command injection in the WHOIS checker
+func TestNormalizeCommandInjectionProtection(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "whois flag injection -h",
+			input: "-h malicious-whois-server.com example.com",
+		},
+		{
+			name:  "whois flag injection --server",
+			input: "--server=evil.com example.com",
+		},
+		{
+			name:  "leading hyphen alone",
+			input: "-example.com",
+		},
+		{
+			name:  "double hyphen start",
+			input: "--example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Normalize(tt.input)
+			if err != ErrInvalidFormat {
+				t.Errorf("Normalize(%q) should return ErrInvalidFormat for command injection attempt, got: %v", tt.input, err)
+			}
+		})
+	}
+}

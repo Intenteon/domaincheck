@@ -3,6 +3,7 @@ package domain
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 )
 
@@ -43,10 +44,31 @@ func Normalize(input string) (Domain, error) {
 		return Domain{}, ErrEmptyDomain
 	}
 
-	// If no dot present, append .com (this is the safer CLI logic)
-	if !strings.Contains(input, ".") {
-		input = input + ".com"
+	// SECURITY: Reject domains starting with '-' to prevent command injection
+	// This prevents inputs like "-h malicious.com" from being passed to whois
+	if strings.HasPrefix(input, "-") {
+		return Domain{}, ErrInvalidFormat
 	}
+
+	// SECURITY: Validate domain contains only allowed characters
+	// Valid domain characters: a-z, 0-9, hyphen, dot
+	// Domain labels must start and end with alphanumeric (not hyphen)
+	validChars := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+
+	// If no dot present, append .com (this is the safer CLI logic)
+	var fullDomain string
+	if !strings.Contains(input, ".") {
+		fullDomain = input + ".com"
+	} else {
+		fullDomain = input
+	}
+
+	// Validate the full domain format
+	if !validChars.MatchString(fullDomain) {
+		return Domain{}, ErrInvalidFormat
+	}
+
+	input = fullDomain
 
 	// Validate format: must not end with a dot
 	if strings.HasSuffix(input, ".") {
