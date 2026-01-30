@@ -9,14 +9,22 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"domaincheck/internal/domain"
 )
 
-const defaultServer = "http://localhost:8765"
+const (
+	defaultServer      = "http://localhost:8765"
+	timeoutPerDomain   = 12                   // seconds per domain
+	minTimeout         = 30                   // minimum timeout in seconds
+	maxTimeout         = 300                  // maximum timeout in seconds (5 minutes)
+	maxFileSize        = 10 * 1024 * 1024     // 10MB limit for input files
+	maxErrorBodySize   = 1 * 1024 * 1024      // 1MB limit for error response bodies
+	domainDisplayWidth = 30                   // width for domain column in output
+)
 
-type CheckRequest struct {
-	Domains []string `json:"domains"`
-}
-
+// DomainResult represents the JSON wire format for a single domain result.
+// This is separate from domain.Result to decouple the CLI from server internals.
 type DomainResult struct {
 	Domain    string `json:"domain"`
 	Available bool   `json:"available"`
@@ -84,6 +92,11 @@ func main() {
 			}
 			i++
 			server = args[i]
+			// Validate server URL format
+			if !strings.HasPrefix(server, "http://") && !strings.HasPrefix(server, "https://") {
+				fmt.Fprintln(os.Stderr, "Error: server URL must start with http:// or https://")
+				os.Exit(1)
+			}
 		case "-j", "--json":
 			jsonOutput = true
 		case "-a", "--available":
@@ -121,7 +134,9 @@ func main() {
 			reader = f
 		}
 
-		data, err := io.ReadAll(reader)
+		// Limit file size to prevent memory exhaustion
+		limitedReader := io.LimitReader(reader, maxFileSize)
+		data, err := io.ReadAll(limitedReader)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
 			os.Exit(1)
@@ -141,20 +156,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Normalize domains
-	for i, d := range domains {
-		d = strings.ToLower(strings.TrimSpace(d))
-		if !strings.Contains(d, ".") {
-			d = d + ".com"
+	// Normalize domains using internal/domain package
+	normalizedDomains := make([]string, 0, len(domains))
+	for _, d := range domains {
+		normalized, err := domain.Normalize(d)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid domain format: %s (%v)\n", d, err)
+			os.Exit(1)
 		}
-		domains[i] = d
+		normalizedDomains = append(normalizedDomains, normalized.Full)
 	}
 
 	// Make request
-	reqBody := CheckRequest{Domains: domains}
-	jsonData, _ := json.Marshal(reqBody)
+	reqBody := domain.CheckRequest{Domains: normalizedDomains}
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to marshal request: %v\n", err)
+		os.Exit(1)
+	}
 
-	client := &http.Client{Timeout: time.Duration(len(domains)*12) * time.Second}
+	// Calculate timeout with min/max bounds to prevent overflow or too-short timeouts
+	timeout := len(normalizedDomains) * timeoutPerDomain
+	if timeout < minTimeout {
+		timeout = minTimeout
+	}
+	if timeout > maxTimeout {
+		timeout = maxTimeout
+	}
+	client := &http.Client{Timeout: time.Duration(timeout) * time.Second}
 	resp, err := client.Post(server+"/check", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error connecting to server: %v\n", err)
@@ -164,7 +193,13 @@ func main() {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		// Limit error response body to prevent memory exhaustion
+		limitedBody := io.LimitReader(resp.Body, maxErrorBodySize)
+		body, err := io.ReadAll(limitedBody)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Server error (%d): (could not read body: %v)\n", resp.StatusCode, err)
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stderr, "Server error (%d): %s\n", resp.StatusCode, string(body))
 		os.Exit(1)
 	}
@@ -198,11 +233,17 @@ func main() {
 			filtered.Checked = len(filtered.Results)
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			enc.Encode(filtered)
+			if err := enc.Encode(filtered); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: failed to encode response: %v\n", err)
+				os.Exit(1)
+			}
 		} else {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			enc.Encode(result)
+			if err := enc.Encode(result); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: failed to encode response: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		return
 	}
@@ -214,11 +255,11 @@ func main() {
 		}
 
 		if r.Available {
-			fmt.Printf("✓ %-30s AVAILABLE\n", r.Domain)
+			fmt.Printf("✓ %-*s AVAILABLE\n", domainDisplayWidth, r.Domain)
 		} else if r.Error != "" {
-			fmt.Printf("? %-30s ERROR: %s\n", r.Domain, r.Error)
+			fmt.Printf("? %-*s ERROR: %s\n", domainDisplayWidth, r.Domain, r.Error)
 		} else {
-			fmt.Printf("✗ %-30s TAKEN\n", r.Domain)
+			fmt.Printf("✗ %-*s TAKEN\n", domainDisplayWidth, r.Domain)
 		}
 	}
 
