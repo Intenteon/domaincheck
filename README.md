@@ -4,14 +4,15 @@ A fast, concurrent domain availability checking service and CLI written in Go. U
 
 ## Features
 
+- **Web Dashboard**: Interactive web interface for domain checking (NEW in v2.1)
 - **Fast RDAP Protocol**: 3-5x faster than traditional WHOIS (100-500ms vs 500-2000ms)
 - **DNS Pre-filtering**: Quick availability checks via DNS nameserver queries (10-120ms)
 - **Intelligent Fallback**: Automatic WHOIS fallback for domains without RDAP support
 - **Bulk Processing**: Check up to 100 domains per request with concurrent processing
-- **Security Hardened**: Command injection protection, DoS prevention, input validation
+- **Security Hardened**: CSRF protection, XSS prevention, DoS mitigation, input validation
 - **JSON API**: RESTful API for easy integration
 - **Flexible CLI**: Multiple input methods (args, file, stdin) with filtering options
-- **100% Backward Compatible**: Drop-in replacement for v1.x
+- **100% Backward Compatible**: Drop-in replacement for v1.x and v2.0
 
 ## Quick Start
 
@@ -101,9 +102,28 @@ PORT=9000 ./domaincheck-server
 ```
 
 **Server Endpoints:**
+- `GET /` - Web dashboard (interactive form)
 - `POST /check` - Check multiple domains (JSON body)
 - `GET /check/{domain}` - Check single domain
 - `GET /health` - Health check
+
+#### Web Dashboard
+
+Open `http://localhost:8765/` in your browser to access the interactive dashboard.
+
+**Features:**
+- Real-time domain availability checking
+- Bulk domain input (up to 100 domains)
+- Visual results with status indicators
+- Copy results to clipboard
+- CSRF-protected form submissions
+- Mobile-responsive design
+
+**Security:**
+- CSRF token protection on all form submissions
+- XSS prevention via content sanitization
+- Content Security Policy headers
+- Input validation (max 100 domains)
 
 ### CLI
 
@@ -222,11 +242,14 @@ Response:
 
 ## Security Features
 
+- **CSRF Protection**: Synchronizer token pattern with 1-hour expiration (v2.1)
+- **XSS Prevention**: Content sanitization and CSP headers (v2.1)
 - **Command Injection Protection**: Strict domain validation with regex
-- **DoS Prevention**: Request body limits (1MB), timeouts (60s), file size limits (10MB)
+- **DoS Prevention**: Request body limits (1MB), timeouts (60s), file size limits (10MB), CSRF token limits (10,000)
 - **Input Validation**: All user input sanitized and validated
 - **Resource Limits**: Controlled concurrency, bounded memory usage
 - **Error Sanitization**: No internal details exposed to clients
+- **Security Headers**: X-Frame-Options, X-Content-Type-Options, CSP (v2.1)
 
 ## Domain Normalization
 
@@ -284,9 +307,9 @@ go test -race ./...
 **Test Coverage:**
 - `internal/domain`: 100% (normalization + security tests)
 - `internal/checker`: 100% (mocked unit tests)
-- `internal/server`: 85.7% (HTTP handler tests)
+- `internal/server`: 95%+ (HTTP handlers, CSRF, XSS, dashboard tests)
 
-**Total:** 91 tests, 100% pass rate
+**Total:** 212 tests (23 new dashboard tests in v2.1), 100% pass rate
 
 ## Troubleshooting
 
@@ -315,16 +338,22 @@ curl http://localhost:8765/health
 head -50 domains.txt | ./domaincheck -
 ```
 
-## Migration from v1.x
+## Migration from v1.x / v2.0
 
-v2.0 is 100% backward compatible with v1.x:
+v2.1 is 100% backward compatible with v1.x and v2.0:
 
 - ✅ All API endpoints unchanged
 - ✅ All CLI flags work identically
 - ✅ JSON response format unchanged
 - ✅ Domain normalization behavior preserved (bug fixed: `example.org` no longer becomes `example.org.com`)
 
-**What's New:**
+**What's New in v2.1:**
+- Web dashboard at `http://localhost:8765/`
+- CSRF protection for web form submissions
+- XSS prevention and security headers
+- Enhanced DoS protection (CSRF token limits)
+
+**What's New in v2.0:**
 - RDAP protocol for 3-5x speed improvement
 - DNS pre-filter for quick checks
 - Enhanced security hardening
@@ -347,14 +376,16 @@ MIT License - see LICENSE file for details
 
 ## Project Status
 
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Status:** Production Ready
 **Last Updated:** 2026-01-30
 
+- ✅ Web dashboard implemented (v2.1)
+- ✅ CSRF & XSS protection (v2.1)
 - ✅ Core refactoring complete
 - ✅ RDAP protocol implemented
-- ✅ Security hardened (0 vulnerabilities)
-- ✅ All tests passing (91 tests)
-- ✅ 100% backward compatible
+- ✅ Security hardened (0 CRITICAL, 0 HIGH vulnerabilities)
+- ✅ All tests passing (212 tests)
+- ✅ 100% backward compatible with v1.x and v2.0
 
 See [PROJECT-STATUS.md](PROJECT-STATUS.md) for detailed development progress.
