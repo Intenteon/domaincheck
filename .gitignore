@@ -88,3 +88,6 @@ mem.out
 release/
 build/
 out/
+
+# Archived documentation
+archive/
