@@ -20,6 +20,14 @@ func main() {
 		port = "8765"
 	}
 
+	// Configure base URL for dashboard API examples.
+	// When BASE_URL is set (e.g., "https://domaincheck.intenteon.com"), the
+	// dashboard displays correct curl examples. When unset, it derives the
+	// URL from the incoming request's Host header.
+	if baseURL := os.Getenv("BASE_URL"); baseURL != "" {
+		server.SetBaseURL(baseURL)
+	}
+
 	// Register HTTP handlers from internal/server package
 	http.HandleFunc("/", server.DashboardHandler)
 	http.HandleFunc("/check", server.CheckDomainsHandler)

@@ -190,15 +190,15 @@
             <section id="examples">
                 <h2>API Examples</h2>
                 <p><strong>Check multiple domains:</strong></p>
-                <pre><code>curl -X POST http://localhost:8765/check \
+                <pre><code>curl -X POST {{.BaseURL}}/check \
   -H "Content-Type: application/json" \
   -d '{"domains": ["trucore", "priment", "axient"]}'</code></pre>
 
                 <p><strong>Check single domain:</strong></p>
-                <pre><code>curl http://localhost:8765/check/trucore.com</code></pre>
+                <pre><code>curl {{.BaseURL}}/check/trucore.com</code></pre>
 
                 <p><strong>Health check:</strong></p>
-                <pre><code>curl http://localhost:8765/health</code></pre>
+                <pre><code>curl {{.BaseURL}}/health</code></pre>
             </section>
 
             <section id="check-form">

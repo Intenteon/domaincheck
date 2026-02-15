@@ -138,6 +138,34 @@ func ValidateCSRFToken(token string) bool {
 // dashboardData holds the template data for rendering the dashboard.
 type dashboardData struct {
 	CSRFToken string
+	BaseURL   string
+}
+
+// configuredBaseURL holds the base URL set via SetBaseURL. When empty,
+// baseURLForRequest falls back to deriving the URL from request headers.
+var configuredBaseURL string
+
+// SetBaseURL configures the base URL used in dashboard API examples.
+// This should be called once at startup from the BASE_URL environment variable.
+// When set, this value is used verbatim, avoiding Host header injection risks.
+func SetBaseURL(url string) {
+	configuredBaseURL = url
+}
+
+// baseURLForRequest returns the base URL for API examples shown on the dashboard.
+// It prefers the configured BASE_URL (set via SetBaseURL) for security. If not
+// configured, it derives the URL from request headers with scheme validation.
+func baseURLForRequest(r *http.Request) string {
+	if configuredBaseURL != "" {
+		return configuredBaseURL
+	}
+	// Fallback: derive from request. Only accept "https" as a forwarded proto;
+	// any other value (including injection attempts) defaults to "http".
+	scheme := "http"
+	if r.Header.Get("X-Forwarded-Proto") == "https" || r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
 }
 
 // DashboardHandler handles GET / for the web-based domain checker dashboard.
@@ -186,6 +214,7 @@ func DashboardHandler(w http.ResponseWriter, r *http.Request) {
 	// Prepare template data
 	data := dashboardData{
 		CSRFToken: csrfToken,
+		BaseURL:   baseURLForRequest(r),
 	}
 
 	// Set security headers
